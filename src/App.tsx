@@ -31,7 +31,8 @@ type IconName =
   | "check"
   | "clock"
   | "close"
-  | "sparkle";
+  | "sparkle"
+  | "volume";
 
 type Settings = {
   timerEnabled: boolean;
@@ -387,16 +388,16 @@ function App() {
       <Scene theme={settings.theme} />
       <div className="ambient-overlay" />
       <main className="app-shell">
-        <header className="topbar">
+        {!isFocusMode && <header className="topbar">
           <div className="brand"><span className="brand-mark">か</span><div><strong>KanaType</strong><span>Japanese reading practice</span></div></div>
-          {!isFocusMode && <div className="top-actions"><button className="icon-button" aria-label="Toggle focus mode" onClick={() => setIsFocusMode(true)} type="button"><Icon name="expand" /></button><button className="icon-button" aria-label="Open settings" onClick={() => setIsSettingsOpen(true)} type="button"><Icon name="settings" /></button></div>}
-          {isFocusMode && <button className="exit-focus" onClick={() => setIsFocusMode(false)} type="button"><Icon name="close" /> Exit focus</button>}
-        </header>
+          <div className="top-actions"><button className="icon-button" aria-label="Toggle focus mode" onClick={() => setIsFocusMode(true)} type="button"><Icon name="expand" /></button><button className="icon-button" aria-label="Open settings" onClick={() => setIsSettingsOpen(true)} type="button"><Icon name="settings" /></button></div>
+        </header>}
+        {isFocusMode && <button className="exit-focus focus-exit" onClick={() => setIsFocusMode(false)} type="button"><Icon name="close" /> Exit focus</button>}
 
         <section className="practice-layout">
           {!isFocusMode && <aside className="intro-panel"><p className="eyebrow">READ. TYPE. REMEMBER.</p><h1>Find your rhythm<br /><em>in Japanese.</em></h1><p className="intro-copy">Read the sentence, then type its romaji. Build speed one calm phrase at a time.</p><div className="tip-card"><Icon name="sparkle" /><span><strong>Quick tip</strong><br />Press <kbd>Enter</kbd> when your answer is ready.</span></div></aside>}
           <section className="practice-card">
-            <div className="card-header"><div><span className="label">CURRENT PHRASE</span><span className="grammar-tag">{sentence.difficulty} · {sentence.grammar}</span></div><span className="phrase-count">{sentenceIndex + 1} <i>/ {availableSentences.length}</i></span></div>
+            <div className="card-header"><div><span className="label">CURRENT PHRASE</span><span className="grammar-tag">{sentence.difficulty} · {sentence.grammar}</span></div><div className="card-header-actions"><button aria-label="Hear this sentence aloud (1)" className="sound-key-button" onClick={playSentenceAudio} title="Hear this sentence aloud (1)" type="button"><Icon name="volume" size={14} /><span>1</span></button><span className="phrase-count">{sentenceIndex + 1} <i>/ {availableSentences.length}</i></span></div></div>
             <div className={`phrase-stage ${isShaking ? "shake" : ""}`}><JapaneseSentence sentence={sentence} typed={typed} /><p className={`translation ${settings.translationMode === "after" && !isCorrect ? "hidden-translation" : ""}`}>{sentence.english}</p></div>
             <div className="typing-section"><div className="typing-header"><span>TYPE THE ROMAJI</span><span>{normalizedTyped.length} / {normalizedExpected.length}</span></div><div className="answer-row"><RomajiSlots words={sentence.romajiWords} typed={typed} /><span className="enter-hint">Enter ↵</span></div><div className="answer-progress"><span style={{ width: `${progress}%` }} /></div></div>
             {isExpired && <div className="expired-message"><strong>Time is up.</strong> The answer was <code>{expected}</code><button onClick={() => { setElapsed(0); setIsExpired(false); setTyped(""); }} type="button">Try again</button></div>}

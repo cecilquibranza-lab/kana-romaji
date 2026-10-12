@@ -625,6 +625,30 @@ kbd {
   border-bottom: 1px solid var(--glass-border);
 }
 
+.card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sound-key-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sound-key-button .icon {
+  color: var(--accent-deep);
+}
+
 .grammar-tag {
   display: inline-block;
   margin-left: 10px;
@@ -998,14 +1022,51 @@ rt {
   animation: shake 260ms ease;
 }
 
+.focus-mode .topbar {
+  display: none;
+}
+
 .focus-mode .practice-layout {
   display: flex;
   justify-content: center;
-  min-height: calc(100vh - 100px);
+  min-height: calc(100vh - 30px);
+  padding-top: 0;
 }
 
 .focus-mode .practice-card {
-  width: min(820px, 100%);
+  width: min(1160px, calc(100vw - 30px));
+  min-height: calc(100vh - 30px);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 28px;
+  box-shadow: 0 30px 80px rgba(18, 22, 46, 0.17);
+}
+
+.focus-mode .phrase-stage {
+  min-height: 400px;
+  padding-top: 72px;
+}
+
+.focus-mode .card-header,
+.focus-mode .card-footer,
+.focus-mode .typing-section {
+  padding-inline: 28px;
+}
+
+.focus-mode .card-header {
+  padding-top: 20px;
+  padding-bottom: 18px;
+}
+
+.focus-mode .card-footer {
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.focus-mode .exit-focus {
+  position: fixed;
+  top: 22px;
+  right: 24px;
+  z-index: 15;
 }
 
 @keyframes shake {
