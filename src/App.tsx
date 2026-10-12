@@ -72,6 +72,20 @@ const defaultSettings: Settings = {
   theme: "sakura",
 };
 
+const soundEffects = {
+  type: "/sfx/universfield-bubble-pop-02-293341.mp3",
+  erase: "/sfx/universfield-bubble-pop-03-320977.mp3",
+  correct: "/sfx/floraphonic-jug-pop-1-186886.mp3",
+  incorrect: "/sfx/floraphonic-jug-pop-2-186887.mp3",
+} as const;
+
+function playSoundEffect(effect: keyof typeof soundEffects): void {
+  const audio = new Audio(soundEffects[effect]);
+  void audio.play().catch((error: unknown) => {
+    console.warn(`Unable to play ${effect} sound effect:`, error);
+  });
+}
+
 const ROMAJI_MAP: Record<string, string> = {
   あ: "a", い: "i", う: "u", え: "e", お: "o",
   か: "ka", き: "ki", く: "ku", け: "ke", こ: "ko",
@@ -307,6 +321,7 @@ function App() {
     }
     if (event.key === "Enter") {
       event.preventDefault();
+      playSoundEffect(isCorrect ? "correct" : "incorrect");
       if (isCorrect) nextSentence();
       else {
         setMistakes((count) => count + 1);
@@ -316,16 +331,19 @@ function App() {
     }
     if (event.key === "Backspace" && event.ctrlKey) {
       event.preventDefault();
+      playSoundEffect("erase");
       setTyped("");
       return;
     }
     if (event.key === "Backspace") {
       event.preventDefault();
+      playSoundEffect("erase");
       setTyped((value) => value.slice(0, -1));
       return;
     }
     if (/^[a-zA-Z]$/.test(event.key)) {
       event.preventDefault();
+      playSoundEffect("type");
       handleTypedValue(`${typed}${event.key.toLowerCase()}`);
     }
   };
