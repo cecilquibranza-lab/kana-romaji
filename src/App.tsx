@@ -183,10 +183,12 @@ function splitRomajiIntoWords(reading: string): string[] {
   const fallback = normalizeAnswer(kanaToRomaji(reading));
   if (!segmenterConstructor) return fallback ? [fallback] : [];
 
-  const particles: Record<string, string> = { は: "wa", が: "ga", を: "o", に: "ni", で: "de", と: "to", へ: "he", も: "mo", の: "no" };
+  const particles: Record<string, string> = { は: "wa", が: "ga", を: "o", に: "ni", で: "de", と: "to", へ: "he", も: "mo", の: "no", か: "ka" };
+  const questionWords = new Set(["何", "なに", "誰", "だれ", "どこ", "いつ", "どれ", "どちら"]);
   const separateWords = new Set(["です", "だ", "でした", "でしょう"]);
   const words: string[] = [];
   let currentReading = "";
+  let previousSegment = "";
 
   const flushCurrentWord = () => {
     const word = normalizeAnswer(kanaToRomaji(currentReading));
@@ -196,7 +198,15 @@ function splitRomajiIntoWords(reading: string): string[] {
 
   for (const segment of new segmenterConstructor("ja", { granularity: "word" }).segment(reading)) {
     if (!segment.isWordLike) continue;
-    if (particles[segment.segment]) {
+    const joinedQuestionParticle = questionWords.has(previousSegment) &&
+      segment.segment.startsWith("に") &&
+      segment.segment.length > 1;
+
+    if (joinedQuestionParticle) {
+      flushCurrentWord();
+      words.push("ni");
+      currentReading = segment.segment.slice(1);
+    } else if (particles[segment.segment]) {
       flushCurrentWord();
       words.push(particles[segment.segment]);
     } else if (separateWords.has(segment.segment)) {
@@ -205,6 +215,7 @@ function splitRomajiIntoWords(reading: string): string[] {
     } else {
       currentReading += segment.segment;
     }
+    previousSegment = segment.segment;
   }
   flushCurrentWord();
 

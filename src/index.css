@@ -1049,7 +1049,8 @@ rt {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 14px;
+  column-gap: 34px;
+  row-gap: 14px;
   width: 100%;
   min-height: 28px;
   padding: 8px 70px 8px 18px;
