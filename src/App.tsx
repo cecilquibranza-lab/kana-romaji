@@ -136,6 +136,7 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" /></>,
     palette: <><path d="M12 3a9 9 0 0 0 0 18h1.5a1.7 1.7 0 0 0 1.2-2.9 1.7 1.7 0 0 1 1.2-2.9H18A3 3 0 0 0 21 12a9 9 0 0 0-9-9Z" /><circle cx="7.5" cy="11.5" r=".7" fill="currentColor" /><circle cx="9.5" cy="7.5" r=".7" fill="currentColor" /><circle cx="14" cy="6.8" r=".7" fill="currentColor" /><circle cx="17" cy="10" r=".7" fill="currentColor" /></>,
     "arrow-left": <path d="m15 18-6-6 6-6" />, check: <path d="m5 12 4 4L19 6" />, clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>, close: <path d="M6 6l12 12M18 6 6 18" />, sparkle: <><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3Z" /><path d="m18.5 15 .7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7.7-2.1Z" /></>,
+    volume: <><path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" /><path d="M15.5 9.5a4 4 0 0 1 0 5M18 7a7.5 7.5 0 0 1 0 10" /></>,
   };
   return <svg aria-hidden="true" className="icon" fill="none" height={size} viewBox="0 0 24 24" width={size}><g stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7">{paths[name]}</g></svg>;
 }
@@ -239,6 +240,7 @@ function App() {
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
+  const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
   const filteredSentences = useMemo(() => {
     if (settings.sentenceLength === "mixed") return sentences;
     return sentences.filter((item) => item.length === settings.sentenceLength);
@@ -312,6 +314,11 @@ function App() {
     ) {
       return;
     }
+    if (event.key === "1") {
+      event.preventDefault();
+      playSentenceAudio();
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       playSoundEffect(isCorrect ? "correct" : "incorrect");
@@ -353,6 +360,27 @@ function App() {
       setIsExpired(false);
     }
   };
+
+  const playSentenceAudio = useCallback(() => {
+    if (!canSpeak) return;
+    const synth = window.speechSynthesis;
+    synth.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(sentence.japanese);
+    utterance.lang = "ja-JP";
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    synth.speak(utterance);
+  }, [canSpeak, sentence.japanese]);
+
+  useEffect(() => {
+    return () => {
+      if (canSpeak) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [canSpeak]);
 
   return (
     <div className={`app theme-${settings.theme} ${isFocusMode ? "focus-mode" : ""}`}>
