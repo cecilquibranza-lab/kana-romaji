@@ -1049,11 +1049,17 @@ rt {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 7px;
+  gap: 14px;
   width: 100%;
   min-height: 28px;
   padding: 8px 70px 8px 18px;
   color: var(--muted);
+}
+
+.romaji-word {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 7px;
 }
 
 .romaji-slot {
@@ -1074,6 +1080,11 @@ rt {
 
 .romaji-slot.wrong {
   color: var(--danger);
+}
+
+.kana-complete {
+  color: #d19a00;
+  transition: color 140ms ease;
 }
 
 .scene-rain .particle {

@@ -32,6 +32,7 @@ type Sentence = {
   japanese: string;
   parts: SentencePart[];
   romaji: string;
+  romajiWords: string[];
   english: string;
   length: Exclude<Length, "mixed">;
   difficulty: string;
@@ -137,6 +138,79 @@ function kanaToRomaji(value: string): string {
   return result;
 }
 
+type ReadingSegment = { text: string; romaji: string };
+type JapaneseWordSegment = { segment: string; isWordLike?: boolean };
+type JapaneseSegmenter = {
+  segment(value: string): Iterable<JapaneseWordSegment>;
+};
+type JapaneseSegmenterConstructor = new (
+  locales?: string | string[],
+  options?: { granularity: "word" },
+) => JapaneseSegmenter;
+
+function splitReadingIntoSegments(value: string): ReadingSegment[] {
+  const kana = value.replace(/[ァ-ヶ]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0x60));
+  const characters = Array.from(kana);
+  const segments: ReadingSegment[] = [];
+
+  for (let index = 0; index < characters.length; index += 1) {
+    const pair = characters.slice(index, index + 2).join("");
+    if (ROMAJI_COMBOS[pair]) {
+      segments.push({ text: pair, romaji: ROMAJI_COMBOS[pair] });
+      index += 1;
+      continue;
+    }
+
+    const character = characters[index];
+    if (character === "っ") {
+      const nextPair = characters.slice(index + 1, index + 3).join("");
+      const nextRomaji = ROMAJI_COMBOS[nextPair] ?? ROMAJI_MAP[characters[index + 1]] ?? "";
+      segments.push({ text: character, romaji: nextRomaji.charAt(0) });
+    } else if (character === "ー") {
+      segments.push({ text: character, romaji: segments.at(-1)?.romaji.at(-1) ?? "" });
+    } else {
+      segments.push({ text: character, romaji: ROMAJI_MAP[character] ?? character });
+    }
+  }
+
+  return segments;
+}
+
+function splitRomajiIntoWords(reading: string): string[] {
+  const segmenterConstructor = (
+    Intl as typeof Intl & { Segmenter?: JapaneseSegmenterConstructor }
+  ).Segmenter;
+  const fallback = normalizeAnswer(kanaToRomaji(reading));
+  if (!segmenterConstructor) return fallback ? [fallback] : [];
+
+  const particles: Record<string, string> = { は: "wa", が: "ga", を: "o", に: "ni", で: "de", と: "to", へ: "he", も: "mo", の: "no" };
+  const separateWords = new Set(["です", "だ", "でした", "でしょう"]);
+  const words: string[] = [];
+  let currentReading = "";
+
+  const flushCurrentWord = () => {
+    const word = normalizeAnswer(kanaToRomaji(currentReading));
+    if (word) words.push(word);
+    currentReading = "";
+  };
+
+  for (const segment of new segmenterConstructor("ja", { granularity: "word" }).segment(reading)) {
+    if (!segment.isWordLike) continue;
+    if (particles[segment.segment]) {
+      flushCurrentWord();
+      words.push(particles[segment.segment]);
+    } else if (separateWords.has(segment.segment)) {
+      flushCurrentWord();
+      words.push(normalizeAnswer(kanaToRomaji(segment.segment)));
+    } else {
+      currentReading += segment.segment;
+    }
+  }
+  flushCurrentWord();
+
+  return words.length ? words : fallback ? [fallback] : [];
+}
+
 function parseFurigana(value: string): SentencePart[] {
   const parts: SentencePart[] = [];
   const pattern = /\{([^|{}]+)\|([^|{}]+)\}/g;
@@ -170,11 +244,13 @@ function createSentence(
 ): Sentence {
   const parts = parseFurigana(furigana);
   const reading = parts.map((part) => part.reading ?? part.text).join("");
+  const romajiWords = splitRomajiIntoWords(reading);
   return {
     id,
     japanese,
     parts,
-    romaji: kanaToRomaji(reading),
+    romaji: romajiWords.join(""),
+    romajiWords,
     english,
     length: lengthFor(reading),
     difficulty,
@@ -225,8 +301,75 @@ function Scene({ theme }: { theme: ThemeName }) {
   return <div aria-hidden="true" className={`scene scene-${theme}`}><div className="sky-glow" /><div className="celestial" /><div className="cloud cloud-one" /><div className="cloud cloud-two" /><div className="orbit orbit-one" /><div className="orbit orbit-two" /><div className="mountain mountain-back" /><div className="mountain mountain-mid" /><div className="mountain mountain-front" /><div className="branch branch-left" /><div className="branch branch-right" /><div className="particles">{Array.from({ length: 18 }, (_, index) => <i className="particle" key={index} style={{ "--i": index } as React.CSSProperties} />)}</div></div>;
 }
 
-function JapaneseSentence({ sentence }: { sentence: Sentence }) {
-  return <div className="japanese" lang="ja">{sentence.parts.map((part, index) => part.reading ? <ruby key={`${part.text}-${index}`}>{part.text}<rt>{part.reading}</rt></ruby> : <span key={`${part.text}-${index}`}>{part.text}</span>)}</div>;
+function JapaneseSentence({ sentence, typed }: { sentence: Sentence; typed: string }) {
+  const normalizedTyped = normalizeAnswer(typed);
+  const normalizedExpected = normalizeAnswer(sentence.romaji);
+  let romajiPosition = 0;
+
+  const isComplete = (end: number) =>
+    normalizedTyped.length >= end &&
+    normalizedTyped.slice(0, end) === normalizedExpected.slice(0, end);
+
+  return (
+    <div className="japanese" lang="ja">
+      {sentence.parts.map((part, index) => {
+        const segments = splitReadingIntoSegments(part.reading ?? part.text).map((segment) => {
+          romajiPosition += normalizeAnswer(segment.romaji).length;
+          return { ...segment, complete: isComplete(romajiPosition) };
+        });
+        const complete = segments.length > 0 && segments.every((segment) => segment.complete);
+
+        if (part.reading) {
+          return (
+            <ruby key={`${part.text}-${index}`}>
+              <span className={complete ? "kana-complete" : ""}>{part.text}</span>
+              <rt>
+                {segments.map((segment, segmentIndex) => (
+                  <span className={segment.complete ? "kana-complete" : ""} key={`${segment.text}-${segmentIndex}`}>
+                    {segment.text}
+                  </span>
+                ))}
+              </rt>
+            </ruby>
+          );
+        }
+
+        return segments.map((segment, segmentIndex) => (
+          <span className={segment.complete ? "kana-complete" : ""} key={`${segment.text}-${index}-${segmentIndex}`}>
+            {segment.text}
+          </span>
+        ));
+      })}
+    </div>
+  );
+}
+
+function RomajiSlots({ words, typed }: { words: string[]; typed: string }) {
+  const normalizedTyped = normalizeAnswer(typed);
+  let position = 0;
+
+  return (
+    <div aria-label="Romaji answer slots" className="romaji-slots" role="status">
+      {words.map((word, wordIndex) => (
+        <span className="romaji-word" key={`${word}-${wordIndex}`}>
+          {word.split("").map((character) => {
+            const index = position;
+            position += 1;
+            return (
+              <span
+                className={`romaji-slot ${index < normalizedTyped.length ? "filled" : ""} ${
+                  normalizedTyped[index] && normalizedTyped[index] !== character ? "wrong" : ""
+                }`}
+                key={`${character}-${index}`}
+              >
+                {normalizedTyped[index] ?? "_"}
+              </span>
+            );
+          })}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function Toggle({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
@@ -376,8 +519,8 @@ function App() {
           {!isFocusMode && <aside className="intro-panel"><p className="eyebrow">READ. TYPE. REMEMBER.</p><h1>Find your rhythm<br /><em>in Japanese.</em></h1><p className="intro-copy">Read the sentence, then type its romaji. Build speed one calm phrase at a time.</p><div className="tip-card"><Icon name="sparkle" /><span><strong>Quick tip</strong><br />Press <kbd>Enter</kbd> when your answer is ready.</span></div></aside>}
           <section className="practice-card">
             <div className="card-header"><div><span className="label">CURRENT PHRASE</span><span className="grammar-tag">{sentence.difficulty} · {sentence.grammar}</span></div><span className="phrase-count">{sentenceIndex + 1} <i>/ {availableSentences.length}</i></span></div>
-            <div className={`phrase-stage ${isShaking ? "shake" : ""}`}><JapaneseSentence sentence={sentence} /><p className={`translation ${settings.translationMode === "after" && !isCorrect ? "hidden-translation" : ""}`}>{sentence.english}</p></div>
-            <div className="typing-section"><div className="typing-header"><span>TYPE THE ROMAJI</span><span>{normalizedTyped.length} / {normalizedExpected.length}</span></div><div className="answer-row"><div aria-label="Romaji answer slots" className="romaji-slots" role="status">{normalizedExpected.split("").map((character, index) => <span className={`romaji-slot ${index < normalizedTyped.length ? "filled" : ""} ${normalizedTyped[index] && normalizedTyped[index] !== character ? "wrong" : ""}`} key={`${character}-${index}`}>{normalizedTyped[index] ?? "_"}</span>)}</div><span className="enter-hint">Enter ↵</span></div><div className="answer-progress"><span style={{ width: `${progress}%` }} /></div></div>
+            <div className={`phrase-stage ${isShaking ? "shake" : ""}`}><JapaneseSentence sentence={sentence} typed={typed} /><p className={`translation ${settings.translationMode === "after" && !isCorrect ? "hidden-translation" : ""}`}>{sentence.english}</p></div>
+            <div className="typing-section"><div className="typing-header"><span>TYPE THE ROMAJI</span><span>{normalizedTyped.length} / {normalizedExpected.length}</span></div><div className="answer-row"><RomajiSlots words={sentence.romajiWords} typed={typed} /><span className="enter-hint">Enter ↵</span></div><div className="answer-progress"><span style={{ width: `${progress}%` }} /></div></div>
             {isExpired && <div className="expired-message"><strong>Time is up.</strong> The answer was <code>{expected}</code><button onClick={() => { setElapsed(0); setIsExpired(false); setTyped(""); }} type="button">Try again</button></div>}
             <div className="card-footer"><div className="source-note">OpenJLPT · {sentence.grammar}</div><div className="progress-dots">{Array.from({ length: Math.min(5, availableSentences.length) }, (_, index) => <span className={index === sentenceIndex % 5 ? "active" : ""} key={index} />)}</div><button className="next-button" disabled={!isCorrect || isExpired} onClick={nextSentence} type="button">Next phrase <Icon name="arrow-left" /></button></div>
           </section>
