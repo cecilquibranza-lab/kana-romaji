@@ -1,0 +1,10 @@
+{
+  "description": "Enhance your Japanese reading speed by typing romaji equivalents of sentences in a beautifully designed, immersive environment without distractions.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
