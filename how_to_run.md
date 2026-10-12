@@ -1,6 +1,6 @@
 # KanaType — How to Run
 
-KanaType is a React + Vite Japanese reading-speed trainer. It loads verified N5 grammar examples from the local OpenJLPT dataset in `public/data/openjlpt-n5.json`.
+KanaType is a React + Vite Japanese reading-speed trainer. It loads N1–N5 grammar examples from the local OpenJLPT datasets in `public/data/` and shuffles them for each practice session.
 
 ## Requirements
 
@@ -49,7 +49,7 @@ pnpm preview
 4. Use the settings button to change the timer, sentence length, translation visibility, or theme.
 5. Use focus mode to hide the surrounding navigation and statistics.
 
-Settings are saved in the browser's local storage.
+Settings are saved in the browser's local storage. The romaji answer is shown as underscores instead of a text box; type on the keyboard to fill the slots.
 
 ## Data attribution
 

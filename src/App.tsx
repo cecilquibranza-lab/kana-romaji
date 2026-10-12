@@ -1,11 +1,8 @@
 import {
-  type ChangeEvent,
-  type KeyboardEvent,
   type ReactNode,
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 
@@ -155,6 +152,7 @@ function createSentence(
   english: string,
   grammar: string,
   furigana = japanese,
+  difficulty = "N5",
 ): Sentence {
   const parts = parseFurigana(furigana);
   const reading = parts.map((part) => part.reading ?? part.text).join("");
@@ -165,7 +163,7 @@ function createSentence(
     romaji: kanaToRomaji(reading),
     english,
     length: lengthFor(reading),
-    difficulty: "N5",
+    difficulty,
     grammar,
   };
 }
@@ -176,16 +174,26 @@ const fallbackSentences: Sentence[] = [
   createSentence("fallback-haru", "春が来ました。", "Spring has arrived.", "past-tense", "{春|はる}が{来|き}ました。"),
 ];
 
+function shuffleSentences(items: Sentence[]): Sentence[] {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
 function validateRecord(record: OpenJlptRecord): Sentence[] {
   if (typeof record.id !== "string" || typeof record.level !== "string" || !Array.isArray(record.examples)) {
     return [];
   }
+
   return record.examples.flatMap((example, index) => {
     if (!example || typeof example !== "object") return [];
     const item = example as { ja?: unknown; furigana?: unknown; en?: unknown };
     if (typeof item.ja !== "string" || typeof item.en !== "string" || !item.ja.trim() || !item.en.trim()) return [];
     const furigana = typeof item.furigana === "string" ? item.furigana : item.ja;
-    return [createSentence(`${record.id}-${index}`, item.ja, item.en, record.id, furigana)];
+    return [createSentence(`${record.id}-${index}`, item.ja, item.en, record.id, furigana, record.level)];
   });
 }
 
@@ -229,7 +237,6 @@ function App() {
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   const filteredSentences = useMemo(() => {
     if (settings.sentenceLength === "mixed") return sentences;
     return sentences.filter((item) => item.length === settings.sentenceLength);
@@ -246,13 +253,18 @@ function App() {
   const secondsLeft = Math.max(0, settings.timerDuration - elapsed);
 
   useEffect(() => {
-    fetch("/data/openjlpt-n5.json")
-      .then((response) => response.ok ? response.json() as Promise<OpenJlptRecord[]> : Promise.reject(new Error("Dataset unavailable")))
-      .then((records) => {
-        const loaded = records.flatMap(validateRecord);
-        if (loaded.length) setSentences(loaded);
+    Promise.all(["n5", "n4", "n3", "n2", "n1"].map(async (level) => {
+      const response = await fetch(`/data/openjlpt-${level}.json`);
+      if (!response.ok) throw new Error(`${level.toUpperCase()} dataset unavailable`);
+      return response.json() as Promise<OpenJlptRecord[]>;
+    }))
+      .then((datasets) => {
+        const loaded = datasets.flatMap((records) => records.flatMap(validateRecord));
+        if (loaded.length) setSentences(shuffleSentences(loaded));
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        console.error("Failed to load OpenJLPT datasets:", error);
+      });
   }, []);
 
   useEffect(() => {
@@ -269,10 +281,6 @@ function App() {
     if (settings.timerEnabled && elapsed >= settings.timerDuration) setIsExpired(true);
   }, [elapsed, settings.timerDuration, settings.timerEnabled]);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, [sentenceIndex, isExpired]);
-
   const nextSentence = useCallback(() => {
     setSentenceIndex((value) => (value + 1) % Math.max(availableSentences.length, 1));
     setTyped("");
@@ -280,9 +288,7 @@ function App() {
     setIsExpired(false);
   }, [availableSentences.length]);
 
-  const handleInput = (event: ChangeEvent<HTMLInputElement>) => {
-    if (isExpired) return;
-    const value = event.target.value;
+  const handleTypedValue = (value: string) => {
     setTyped(value);
     if (normalizeAnswer(value).length > 0 && !normalizedExpected.startsWith(normalizeAnswer(value))) {
       setMistakes((count) => count + 1);
@@ -291,11 +297,18 @@ function App() {
     }
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+    if (isExpired || isSettingsOpen) return;
+    if (
+      event.target instanceof HTMLElement &&
+      event.target.closest("button, input, textarea, select, [contenteditable='true']")
+    ) {
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
-      if (isCorrect && !isExpired) nextSentence();
-      else if (!isExpired) {
+      if (isCorrect) nextSentence();
+      else {
         setMistakes((count) => count + 1);
         setIsShaking(true);
         window.setTimeout(() => setIsShaking(false), 260);
@@ -304,8 +317,23 @@ function App() {
     if (event.key === "Backspace" && event.ctrlKey) {
       event.preventDefault();
       setTyped("");
+      return;
+    }
+    if (event.key === "Backspace") {
+      event.preventDefault();
+      setTyped((value) => value.slice(0, -1));
+      return;
+    }
+    if (/^[a-zA-Z]$/.test(event.key)) {
+      event.preventDefault();
+      handleTypedValue(`${typed}${event.key.toLowerCase()}`);
     }
   };
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  });
 
   const updateSetting = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     setSettings((current) => ({ ...current, [key]: value }));
@@ -329,9 +357,9 @@ function App() {
         <section className="practice-layout">
           {!isFocusMode && <aside className="intro-panel"><p className="eyebrow">READ. TYPE. REMEMBER.</p><h1>Find your rhythm<br /><em>in Japanese.</em></h1><p className="intro-copy">Read the sentence, then type its romaji. Build speed one calm phrase at a time.</p><div className="tip-card"><Icon name="sparkle" /><span><strong>Quick tip</strong><br />Press <kbd>Enter</kbd> when your answer is ready.</span></div></aside>}
           <section className="practice-card">
-            <div className="card-header"><div><span className="label">CURRENT PHRASE</span><span className="grammar-tag">{sentence.difficulty} · {sentence.grammar}</span></div><span className="phrase-count">{sentenceIndex + 1} <i>/ {sentences.length}</i></span></div>
+            <div className="card-header"><div><span className="label">CURRENT PHRASE</span><span className="grammar-tag">{sentence.difficulty} · {sentence.grammar}</span></div><span className="phrase-count">{sentenceIndex + 1} <i>/ {availableSentences.length}</i></span></div>
             <div className={`phrase-stage ${isShaking ? "shake" : ""}`}><JapaneseSentence sentence={sentence} /><p className={`translation ${settings.translationMode === "after" && !isCorrect ? "hidden-translation" : ""}`}>{sentence.english}</p></div>
-            <div className="typing-section"><div className="typing-header"><span>TYPE THE ROMAJI</span><span>{normalizedTyped.length} / {normalizedExpected.length}</span></div><div className="input-wrap"><input ref={inputRef} aria-label="Type the romaji answer" autoCapitalize="none" autoComplete="off" autoCorrect="off" disabled={isExpired} onChange={handleInput} onKeyDown={handleKeyDown} placeholder={isExpired ? "Time is up" : "Start typing..."} spellCheck={false} value={typed} /><span className="enter-hint">Enter ↵</span></div><div className="answer-progress"><span style={{ width: `${progress}%` }} /></div></div>
+            <div className="typing-section"><div className="typing-header"><span>TYPE THE ROMAJI</span><span>{normalizedTyped.length} / {normalizedExpected.length}</span></div><div className="answer-row"><div aria-label="Romaji answer slots" className="romaji-slots" role="status">{normalizedExpected.split("").map((character, index) => <span className={`romaji-slot ${index < normalizedTyped.length ? "filled" : ""} ${normalizedTyped[index] && normalizedTyped[index] !== character ? "wrong" : ""}`} key={`${character}-${index}`}>{normalizedTyped[index] ?? "_"}</span>)}</div><span className="enter-hint">Enter ↵</span></div><div className="answer-progress"><span style={{ width: `${progress}%` }} /></div></div>
             {isExpired && <div className="expired-message"><strong>Time is up.</strong> The answer was <code>{expected}</code><button onClick={() => { setElapsed(0); setIsExpired(false); setTyped(""); }} type="button">Try again</button></div>}
             <div className="card-footer"><div className="source-note">OpenJLPT · {sentence.grammar}</div><div className="progress-dots">{Array.from({ length: Math.min(5, availableSentences.length) }, (_, index) => <span className={index === sentenceIndex % 5 ? "active" : ""} key={index} />)}</div><button className="next-button" disabled={!isCorrect || isExpired} onClick={nextSentence} type="button">Next phrase <Icon name="arrow-left" /></button></div>
           </section>

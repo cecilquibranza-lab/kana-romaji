@@ -698,25 +698,11 @@ rt {
   font-size: 9px;
 }
 
-.input-wrap {
+.answer-row {
   position: relative;
-}
-
-.input-wrap input {
-  width: 100%;
-  padding: 16px 82px 16px 17px;
-  border: 1px solid var(--glass-border);
-  border-radius: 12px;
-  outline: none;
-  color: var(--ink);
-  background: var(--glass-strong);
-  font-family: "Plus Jakarta Sans", monospace;
-  font-size: 15px;
-  letter-spacing: 0.03em;
-}
-
-.input-wrap input::placeholder {
-  color: var(--muted);
+  display: flex;
+  min-height: 58px;
+  align-items: center;
 }
 
 .enter-hint {
@@ -1057,6 +1043,37 @@ rt {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+.romaji-slots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 28px;
+  padding: 8px 70px 8px 18px;
+  color: var(--muted);
+}
+
+.romaji-slot {
+  display: inline-grid;
+  width: 13px;
+  height: 28px;
+  place-items: center;
+  color: var(--muted);
+  font-family: "Plus Jakarta Sans", monospace;
+  font-size: 16px;
+  line-height: 1;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.romaji-slot.filled {
+  color: var(--ink);
+}
+
+.romaji-slot.wrong {
+  color: var(--danger);
 }
 
 .scene-rain .particle {
