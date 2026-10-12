@@ -5,6 +5,13 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  createSentence,
+  normalizeAnswer,
+  splitReadingIntoSegments,
+  type Sentence,
+  type SentencePart,
+} from "./romaji";
 
 type ThemeName =
   | "sakura"
@@ -25,19 +32,6 @@ type IconName =
   | "clock"
   | "close"
   | "sparkle";
-
-type SentencePart = { text: string; reading?: string };
-type Sentence = {
-  id: string;
-  japanese: string;
-  parts: SentencePart[];
-  romaji: string;
-  romajiWords: string[];
-  english: string;
-  length: Exclude<Length, "mixed">;
-  difficulty: string;
-  grammar: string;
-};
 
 type Settings = {
   timerEnabled: boolean;
@@ -87,192 +81,22 @@ function playSoundEffect(effect: keyof typeof soundEffects): void {
   });
 }
 
-const ROMAJI_MAP: Record<string, string> = {
-  あ: "a", い: "i", う: "u", え: "e", お: "o",
-  か: "ka", き: "ki", く: "ku", け: "ke", こ: "ko",
-  さ: "sa", し: "shi", す: "su", せ: "se", そ: "so",
-  た: "ta", ち: "chi", つ: "tsu", て: "te", と: "to",
-  な: "na", に: "ni", ぬ: "nu", ね: "ne", の: "no",
-  は: "ha", ひ: "hi", ふ: "fu", へ: "he", ほ: "ho",
-  ま: "ma", み: "mi", む: "mu", め: "me", も: "mo",
-  や: "ya", ゆ: "yu", よ: "yo", ら: "ra", り: "ri",
-  る: "ru", れ: "re", ろ: "ro", わ: "wa", を: "o", ん: "n",
-  が: "ga", ぎ: "gi", ぐ: "gu", げ: "ge", ご: "go",
-  ざ: "za", じ: "ji", ず: "zu", ぜ: "ze", ぞ: "zo",
-  だ: "da", ぢ: "ji", づ: "zu", で: "de", ど: "do",
-  ば: "ba", び: "bi", ぶ: "bu", べ: "be", ぼ: "bo",
-  ぱ: "pa", ぴ: "pi", ぷ: "pu", ぺ: "pe", ぽ: "po",
-  ぁ: "a", ぃ: "i", ぅ: "u", ぇ: "e", ぉ: "o",
-  ゔ: "vu", ゃ: "ya", ゅ: "yu", ょ: "yo",
-};
-const ROMAJI_COMBOS: Record<string, string> = {
-  きゃ: "kya", きゅ: "kyu", きょ: "kyo", ぎゃ: "gya", ぎゅ: "gyu", ぎょ: "gyo",
-  しゃ: "sha", しゅ: "shu", しょ: "sho", じゃ: "ja", じゅ: "ju", じょ: "jo",
-  ちゃ: "cha", ちゅ: "chu", ちょ: "cho", にゃ: "nya", にゅ: "nyu", にょ: "nyo",
-  ひゃ: "hya", ひゅ: "hyu", ひょ: "hyo", びゃ: "bya", びゅ: "byu", びょ: "byo",
-  ぴゃ: "pya", ぴゅ: "pyu", ぴょ: "pyo", みゃ: "mya", みゅ: "myu", みょ: "myo",
-  りゃ: "rya", りゅ: "ryu", りょ: "ryo", てぃ: "ti", でぃ: "di", ふぁ: "fa",
-  ふぃ: "fi", ふぇ: "fe", ふぉ: "fo", うぃ: "wi", うぇ: "we", うぉ: "wo",
-};
-
-function kanaToRomaji(value: string): string {
-  const kana = value.replace(/[ァ-ヶ]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0x60));
-  let result = "";
-  for (let index = 0; index < kana.length; index += 1) {
-    const pair = kana.slice(index, index + 2);
-    if (ROMAJI_COMBOS[pair]) {
-      result += ROMAJI_COMBOS[pair];
-      index += 1;
-      continue;
-    }
-    const char = kana[index];
-    if (char === "っ") {
-      const next = ROMAJI_MAP[kana[index + 1]] ?? "";
-      result += next.charAt(0);
-    } else if (char === "ー") {
-      result += result.at(-1) ?? "";
-    } else {
-      result += ROMAJI_MAP[char] ?? char;
-    }
-  }
-  return result;
-}
-
-type ReadingSegment = { text: string; romaji: string };
-type JapaneseWordSegment = { segment: string; isWordLike?: boolean };
-type JapaneseSegmenter = {
-  segment(value: string): Iterable<JapaneseWordSegment>;
-};
-type JapaneseSegmenterConstructor = new (
-  locales?: string | string[],
-  options?: { granularity: "word" },
-) => JapaneseSegmenter;
-
-function splitReadingIntoSegments(value: string): ReadingSegment[] {
-  const kana = value.replace(/[ァ-ヶ]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0x60));
-  const characters = Array.from(kana);
-  const segments: ReadingSegment[] = [];
-
-  for (let index = 0; index < characters.length; index += 1) {
-    const pair = characters.slice(index, index + 2).join("");
-    if (ROMAJI_COMBOS[pair]) {
-      segments.push({ text: pair, romaji: ROMAJI_COMBOS[pair] });
-      index += 1;
-      continue;
-    }
-
-    const character = characters[index];
-    if (character === "っ") {
-      const nextPair = characters.slice(index + 1, index + 3).join("");
-      const nextRomaji = ROMAJI_COMBOS[nextPair] ?? ROMAJI_MAP[characters[index + 1]] ?? "";
-      segments.push({ text: character, romaji: nextRomaji.charAt(0) });
-    } else if (character === "ー") {
-      segments.push({ text: character, romaji: segments.at(-1)?.romaji.at(-1) ?? "" });
-    } else {
-      segments.push({ text: character, romaji: ROMAJI_MAP[character] ?? character });
-    }
-  }
-
-  return segments;
-}
-
-function splitRomajiIntoWords(reading: string): string[] {
-  const segmenterConstructor = (
-    Intl as typeof Intl & { Segmenter?: JapaneseSegmenterConstructor }
-  ).Segmenter;
-  const fallback = normalizeAnswer(kanaToRomaji(reading));
-  if (!segmenterConstructor) return fallback ? [fallback] : [];
-
-  const particles: Record<string, string> = { は: "wa", が: "ga", を: "o", に: "ni", で: "de", と: "to", へ: "he", も: "mo", の: "no", か: "ka" };
-  const questionWords = new Set(["何", "なに", "誰", "だれ", "どこ", "いつ", "どれ", "どちら"]);
-  const separateWords = new Set(["です", "だ", "でした", "でしょう"]);
-  const words: string[] = [];
-  let currentReading = "";
-  let previousSegment = "";
-
-  const flushCurrentWord = () => {
-    const word = normalizeAnswer(kanaToRomaji(currentReading));
-    if (word) words.push(word);
-    currentReading = "";
-  };
-
-  for (const segment of new segmenterConstructor("ja", { granularity: "word" }).segment(reading)) {
-    if (!segment.isWordLike) continue;
-    const joinedQuestionParticle = questionWords.has(previousSegment) &&
-      segment.segment.startsWith("に") &&
-      segment.segment.length > 1;
-
-    if (joinedQuestionParticle) {
-      flushCurrentWord();
-      words.push("ni");
-      currentReading = segment.segment.slice(1);
-    } else if (particles[segment.segment]) {
-      flushCurrentWord();
-      words.push(particles[segment.segment]);
-    } else if (separateWords.has(segment.segment)) {
-      flushCurrentWord();
-      words.push(normalizeAnswer(kanaToRomaji(segment.segment)));
-    } else {
-      currentReading += segment.segment;
-    }
-    previousSegment = segment.segment;
-  }
-  flushCurrentWord();
-
-  return words.length ? words : fallback ? [fallback] : [];
-}
-
-function parseFurigana(value: string): SentencePart[] {
-  const parts: SentencePart[] = [];
-  const pattern = /\{([^|{}]+)\|([^|{}]+)\}/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(value))) {
-    if (match.index > cursor) parts.push({ text: value.slice(cursor, match.index) });
-    parts.push({ text: match[1], reading: match[2] });
-    cursor = match.index + match[0].length;
-  }
-  if (cursor < value.length) parts.push({ text: value.slice(cursor) });
-  return parts.length ? parts : [{ text: value }];
-}
-
-function normalizeAnswer(value: string): string {
-  return value.toLowerCase().replace(/[\s.,!?。、！？「」『』・…]/g, "");
-}
-
-function lengthFor(text: string): Exclude<Length, "mixed"> {
-  const count = [...normalizeAnswer(kanaToRomaji(text))].length;
-  return count < 16 ? "short" : count < 34 ? "medium" : "long";
-}
-
-function createSentence(
+function createFallbackSentence(
   id: string,
   japanese: string,
   english: string,
   grammar: string,
-  furigana = japanese,
-  difficulty = "N5",
+  furigana: string,
 ): Sentence {
-  const parts = parseFurigana(furigana);
-  const reading = parts.map((part) => part.reading ?? part.text).join("");
-  const romajiWords = splitRomajiIntoWords(reading);
-  return {
-    id,
-    japanese,
-    parts,
-    romaji: romajiWords.join(""),
-    romajiWords,
-    english,
-    length: lengthFor(reading),
-    difficulty,
-    grammar,
-  };
+  const sentence = createSentence(id, japanese, english, grammar, furigana);
+  if (!sentence) throw new Error(`Invalid fallback sentence reading: ${id}`);
+  return sentence;
 }
 
 const fallbackSentences: Sentence[] = [
-  createSentence("fallback-wa", "私は日本語を勉強します。", "I study Japanese.", "wa", "{私|わたし}は{日本語|にほんご}を{勉強|べんきょう}します。"),
-  createSentence("fallback-neko", "猫が窓のそばで寝ています。", "The cat is sleeping by the window.", "ga-subject", "{猫|ねこ}が{窓|まど}のそばで{寝|ね}ています。"),
-  createSentence("fallback-haru", "春が来ました。", "Spring has arrived.", "past-tense", "{春|はる}が{来|き}ました。"),
+  createFallbackSentence("fallback-wa", "私は日本語を勉強します。", "I study Japanese.", "wa", "{私|わたし}は{日本語|にほんご}を{勉強|べんきょう}します。"),
+  createFallbackSentence("fallback-neko", "猫が窓のそばで寝ています。", "The cat is sleeping by the window.", "ga-subject", "{猫|ねこ}が{窓|まど}のそばで{寝|ね}ています。"),
+  createFallbackSentence("fallback-haru", "春が来ました。", "Spring has arrived.", "past-tense", "{春|はる}が{来|き}ました。"),
 ];
 
 function shuffleSentences(items: Sentence[]): Sentence[] {
@@ -284,18 +108,26 @@ function shuffleSentences(items: Sentence[]): Sentence[] {
   return shuffled;
 }
 
-function validateRecord(record: OpenJlptRecord): Sentence[] {
+function validateRecord(record: OpenJlptRecord): { sentences: Sentence[]; skippedWithoutReading: number } {
   if (typeof record.id !== "string" || typeof record.level !== "string" || !Array.isArray(record.examples)) {
-    return [];
+    return { sentences: [], skippedWithoutReading: 0 };
   }
 
-  return record.examples.flatMap((example, index) => {
+  let skippedWithoutReading = 0;
+  const sentences = record.examples.flatMap((example, index) => {
     if (!example || typeof example !== "object") return [];
     const item = example as { ja?: unknown; furigana?: unknown; en?: unknown };
     if (typeof item.ja !== "string" || typeof item.en !== "string" || !item.ja.trim() || !item.en.trim()) return [];
     const furigana = typeof item.furigana === "string" ? item.furigana : item.ja;
-    return [createSentence(`${record.id}-${index}`, item.ja, item.en, record.id, furigana, record.level)];
+    const sentence = createSentence(`${record.id}-${index}`, item.ja, item.en, record.id, furigana, record.level);
+    if (!sentence) {
+      skippedWithoutReading += 1;
+      return [];
+    }
+    return [sentence];
   });
+
+  return { sentences, skippedWithoutReading };
 }
 
 function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
@@ -325,7 +157,9 @@ function JapaneseSentence({ sentence, typed }: { sentence: Sentence; typed: stri
     <div className="japanese" lang="ja">
       {sentence.parts.map((part, index) => {
         const segments = splitReadingIntoSegments(part.reading ?? part.text).map((segment) => {
-          romajiPosition += normalizeAnswer(segment.romaji).length;
+          const particleRomaji = part.text === "は" ? "wa" : part.text === "へ" ? "e" : null;
+          const romaji = particleRomaji ?? segment.romaji;
+          romajiPosition += normalizeAnswer(romaji).length;
           return { ...segment, complete: isComplete(romajiPosition) };
         });
         const complete = segments.length > 0 && segments.every((segment) => segment.complete);
@@ -427,7 +261,12 @@ function App() {
       return response.json() as Promise<OpenJlptRecord[]>;
     }))
       .then((datasets) => {
-        const loaded = datasets.flatMap((records) => records.flatMap(validateRecord));
+        const validated = datasets.flatMap((records) => records.map(validateRecord));
+        const loaded = validated.flatMap((result) => result.sentences);
+        const skipped = validated.reduce((count, result) => count + result.skippedWithoutReading, 0);
+        if (skipped > 0) {
+          console.warn(`Skipped ${skipped} OpenJLPT examples without a reliable kana reading.`);
+        }
         if (loaded.length) setSentences(shuffleSentences(loaded));
       })
       .catch((error: unknown) => {
