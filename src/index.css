@@ -673,6 +673,26 @@ kbd {
   font-weight: 400;
 }
 
+.restart-phrase-button {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px solid var(--glass-border);
+  border-radius: 9px;
+  color: var(--accent-deep);
+  background: var(--glass);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.restart-phrase-button:hover {
+  background: var(--glass-strong);
+}
+
 .phrase-stage {
   min-height: 250px;
   padding: 57px 30px 40px;

@@ -31,6 +31,7 @@ type IconName =
   | "check"
   | "clock"
   | "close"
+  | "restart"
   | "sparkle"
   | "volume";
 
@@ -67,7 +68,7 @@ const defaultSettings: Settings = {
   translationMode: "always",
   theme: "sakura",
 };
-const timerDurations = [20, 15, 10, 5, 3];
+const timerDurations = [30, 25, 20, 15, 10, 5, 3];
 const difficultyTypes: Difficulty[] = ["n5", "n4", "n3", "n2", "n1", "all"];
 
 function loadSettings(): Settings {
@@ -151,6 +152,7 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" /></>,
     palette: <><path d="M12 3a9 9 0 0 0 0 18h1.5a1.7 1.7 0 0 0 1.2-2.9 1.7 1.7 0 0 1 1.2-2.9H18A3 3 0 0 0 21 12a9 9 0 0 0-9-9Z" /><circle cx="7.5" cy="11.5" r=".7" fill="currentColor" /><circle cx="9.5" cy="7.5" r=".7" fill="currentColor" /><circle cx="14" cy="6.8" r=".7" fill="currentColor" /><circle cx="17" cy="10" r=".7" fill="currentColor" /></>,
     "arrow-left": <path d="m15 18-6-6 6-6" />, check: <path d="m5 12 4 4L19 6" />, clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>, close: <path d="M6 6l12 12M18 6 6 18" />, sparkle: <><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3Z" /><path d="m18.5 15 .7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7.7-2.1Z" /></>,
+    restart: <><path d="M20 7v5h-5" /><path d="M19 12a7 7 0 1 1-2.1-5" /></>,
     volume: <><path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" /><path d="M15.5 9.5a4 4 0 0 1 0 5M18 7a7.5 7.5 0 0 1 0 10" /></>,
   };
   return <svg aria-hidden="true" className="icon" fill="none" height={size} viewBox="0 0 24 24" width={size}><g stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7">{paths[name]}</g></svg>;
@@ -313,6 +315,12 @@ function App() {
     setIsExpired(false);
   }, [availableSentences.length, settings.timerDuration, settings.timerEnabled]);
 
+  const restartSentence = useCallback(() => {
+    setTyped("");
+    setRemainingTime(settings.timerDuration);
+    setIsExpired(false);
+  }, [settings.timerDuration]);
+
   const handleTypedValue = (value: string) => {
     setTyped(value);
     if (normalizeAnswer(value).length > 0 && !normalizedExpected.startsWith(normalizeAnswer(value))) {
@@ -323,7 +331,7 @@ function App() {
   };
 
   const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-    if (isExpired || isSettingsOpen) return;
+    if (isSettingsOpen) return;
     if (
       event.target instanceof HTMLElement &&
       event.target.closest("button, input, textarea, select, [contenteditable='true']")
@@ -335,6 +343,12 @@ function App() {
       playSentenceAudio();
       return;
     }
+    if (event.key === "2") {
+      event.preventDefault();
+      restartSentence();
+      return;
+    }
+    if (isExpired) return;
     if (event.key === "Enter") {
       event.preventDefault();
       playSoundEffect(isCorrect ? "correct" : "incorrect");
@@ -414,7 +428,7 @@ function App() {
           {!isFocusMode && <aside className="intro-panel"><p className="eyebrow">READ. TYPE. REMEMBER.</p><h1>Find your rhythm<br /><em>in Japanese.</em></h1><p className="intro-copy">Read the sentence, then type its romaji. Build speed one calm phrase at a time.</p><div className="tip-card"><Icon name="sparkle" /><span><strong>Quick tip</strong><br />Press <kbd>Enter</kbd> when your answer is ready.</span></div></aside>}
           <section className="practice-card">
             {isFocusMode && <div aria-label="Practice statistics" className="focus-stats"><div><span>WPM</span><strong>{wpm}</strong></div><div><span>ACCURACY</span><strong>{accuracy}%</strong></div><div><span>MISTAKES</span><strong>{mistakes}</strong></div><div><span>TIMER</span><strong>{settings.timerEnabled ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}` : "Off"}</strong></div></div>}
-            <div className="card-header"><div><span className="label">CURRENT PHRASE</span><span className="grammar-tag">{sentence.difficulty} · {sentence.grammar}</span></div><div className="card-header-actions"><button aria-label="Hear this sentence aloud (1)" className="sound-key-button" onClick={playSentenceAudio} title="Hear this sentence aloud (1)" type="button"><Icon name="volume" size={14} /><span>1</span></button><span className="phrase-count">{sentenceIndex + 1} <i>/ {availableSentences.length}</i></span></div></div>
+            <div className="card-header"><div><span className="label">CURRENT PHRASE</span><span className="grammar-tag">{sentence.difficulty} · {sentence.grammar}</span></div><div className="card-header-actions"><button aria-label="Hear this sentence aloud (1)" className="sound-key-button" onClick={playSentenceAudio} title="Hear this sentence aloud (1)" type="button"><Icon name="volume" size={14} /><span>1</span></button><span className="phrase-count">{sentenceIndex + 1} <i>/ {availableSentences.length}</i></span><button aria-label="Restart current phrase (2)" className="restart-phrase-button" onClick={restartSentence} title="Restart current phrase (2)" type="button"><Icon name="restart" size={15} /><span>2</span></button></div></div>
             <div className={`phrase-stage ${isShaking ? "shake" : ""}`}><JapaneseSentence sentence={sentence} typed={typed} /><p className={`translation ${settings.translationMode === "after" && !isCorrect ? "hidden-translation" : ""}`}>{sentence.english}</p></div>
             <div className="typing-section"><div className="typing-header"><span>TYPE THE ROMAJI</span><span>{normalizedTyped.length} / {normalizedExpected.length}</span></div><div className="answer-row"><RomajiSlots words={sentence.romajiWords} typed={typed} /><span className="enter-hint">Enter ↵</span></div><div className="answer-progress"><span style={{ width: `${progress}%` }} /></div></div>
             {isExpired && <div className="expired-message"><strong>Time is up.</strong> The answer was <code>{expected}</code><button onClick={() => { setRemainingTime(settings.timerDuration); setIsExpired(false); setTyped(""); }} type="button">Try again</button></div>}
@@ -425,7 +439,7 @@ function App() {
         {!isFocusMode && <footer className="stats-bar"><div className="stat"><span>WPM</span><strong>{wpm}</strong></div><div className="stat"><span>ACCURACY</span><strong>{accuracy}<small>%</small></strong></div><div className="stat"><span>MISTAKES</span><strong>{mistakes}</strong></div><div className="timer-stat"><Icon name="clock" /><span>{settings.timerEnabled ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}` : "Timer off"}</span></div></footer>}
       </main>
 
-      {isSettingsOpen && <div className="modal-backdrop" onClick={() => setIsSettingsOpen(false)}><section aria-label="Settings" className="settings-panel" onClick={(event) => event.stopPropagation()}><div className="settings-heading"><div><span className="eyebrow">PERSONALIZE</span><h2>Practice settings</h2></div><button className="icon-button" aria-label="Close settings" onClick={() => setIsSettingsOpen(false)} type="button"><Icon name="close" /></button></div><div className="setting-row"><div><strong>Timer</strong><span>Challenge yourself against the clock</span></div><Toggle checked={settings.timerEnabled} label="Timer" onChange={() => updateSetting("timerEnabled", !settings.timerEnabled)} /></div>{settings.timerEnabled && <label className="setting-control"><span>Base seconds</span><select onChange={(event) => updateSetting("timerDuration", Number(event.target.value))} value={settings.timerDuration}><option value={20}>20 seconds</option><option value={15}>15 seconds</option><option value={10}>10 seconds</option><option value={5}>5 seconds</option><option value={3}>3 seconds</option></select></label>}<label className="setting-control"><span>Difficulty type</span><select onChange={(event) => updateSetting("difficultyType", event.target.value as Difficulty)} value={settings.difficultyType}><option value="n5">n5</option><option value="n4">n4</option><option value="n3">n3</option><option value="n2">n2</option><option value="n1">n1</option><option value="all">all</option></select></label><label className="setting-control"><span>English translation</span><select onChange={(event) => updateSetting("translationMode", event.target.value as Settings["translationMode"])} value={settings.translationMode}><option value="always">Always visible</option><option value="after">Reveal after correct answer</option></select></label><div className="theme-heading"><Icon name="palette" /><strong>Atmosphere</strong></div><div className="theme-grid">{themeInfo.map((theme) => <button className={`theme-option ${settings.theme === theme.id ? "selected" : ""}`} key={theme.id} onClick={() => updateSetting("theme", theme.id)} type="button"><span className={`theme-swatch swatch-${theme.id}`} /><span><strong>{theme.name}</strong><small>{theme.note}</small></span></button>)}</div></section></div>}
+      {isSettingsOpen && <div className="modal-backdrop" onClick={() => setIsSettingsOpen(false)}><section aria-label="Settings" className="settings-panel" onClick={(event) => event.stopPropagation()}><div className="settings-heading"><div><span className="eyebrow">PERSONALIZE</span><h2>Practice settings</h2></div><button className="icon-button" aria-label="Close settings" onClick={() => setIsSettingsOpen(false)} type="button"><Icon name="close" /></button></div><div className="setting-row"><div><strong>Timer</strong><span>Challenge yourself against the clock</span></div><Toggle checked={settings.timerEnabled} label="Timer" onChange={() => updateSetting("timerEnabled", !settings.timerEnabled)} /></div>{settings.timerEnabled && <label className="setting-control"><span>Base seconds</span><select onChange={(event) => updateSetting("timerDuration", Number(event.target.value))} value={settings.timerDuration}><option value={30}>30 seconds</option><option value={25}>25 seconds</option><option value={20}>20 seconds</option><option value={15}>15 seconds</option><option value={10}>10 seconds</option><option value={5}>5 seconds</option><option value={3}>3 seconds</option></select></label>}<label className="setting-control"><span>Difficulty type</span><select onChange={(event) => updateSetting("difficultyType", event.target.value as Difficulty)} value={settings.difficultyType}><option value="n5">n5</option><option value="n4">n4</option><option value="n3">n3</option><option value="n2">n2</option><option value="n1">n1</option><option value="all">all</option></select></label><label className="setting-control"><span>English translation</span><select onChange={(event) => updateSetting("translationMode", event.target.value as Settings["translationMode"])} value={settings.translationMode}><option value="always">Always visible</option><option value="after">Reveal after correct answer</option></select></label><div className="theme-heading"><Icon name="palette" /><strong>Atmosphere</strong></div><div className="theme-grid">{themeInfo.map((theme) => <button className={`theme-option ${settings.theme === theme.id ? "selected" : ""}`} key={theme.id} onClick={() => updateSetting("theme", theme.id)} type="button"><span className={`theme-swatch swatch-${theme.id}`} /><span><strong>{theme.name}</strong><small>{theme.note}</small></span></button>)}</div></section></div>}
     </div>
   );
 }
