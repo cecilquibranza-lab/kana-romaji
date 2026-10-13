@@ -22,7 +22,7 @@ type ThemeName =
   | "ocean"
   | "minimal"
   | "space";
-type Length = "short" | "medium" | "long" | "mixed";
+type Difficulty = "n5" | "n4" | "n3" | "n2" | "n1" | "all";
 type IconName =
   | "expand"
   | "settings"
@@ -37,7 +37,7 @@ type IconName =
 type Settings = {
   timerEnabled: boolean;
   timerDuration: number;
-  sentenceLength: Length;
+  difficultyType: Difficulty;
   translationMode: "always" | "after";
   theme: ThemeName;
 };
@@ -62,11 +62,25 @@ const themeInfo: { id: ThemeName; name: string; note: string }[] = [
 
 const defaultSettings: Settings = {
   timerEnabled: true,
-  timerDuration: 60,
-  sentenceLength: "mixed",
+  timerDuration: 20,
+  difficultyType: "all",
   translationMode: "always",
   theme: "sakura",
 };
+const timerDurations = [20, 15, 10, 5, 3];
+const difficultyTypes: Difficulty[] = ["n5", "n4", "n3", "n2", "n1", "all"];
+
+function loadSettings(): Settings {
+  try {
+    const savedSettings = JSON.parse(localStorage.getItem("kanatype-settings") ?? "{}") as Partial<Settings>;
+    const timerDuration = timerDurations.find((duration) => duration === savedSettings.timerDuration) ?? defaultSettings.timerDuration;
+    const difficultyType = difficultyTypes.find((difficulty) => difficulty === savedSettings.difficultyType) ?? defaultSettings.difficultyType;
+    return { ...defaultSettings, ...savedSettings, timerDuration, difficultyType };
+  } catch (error) {
+    console.error("Failed to load saved practice settings:", error);
+    return defaultSettings;
+  }
+}
 
 const soundEffects = {
   type: "/sfx/universfield-bubble-pop-02-293341.mp3",
@@ -224,28 +238,23 @@ function Toggle({ checked, label, onChange }: { checked: boolean; label: string;
 }
 
 function App() {
-  const [settings, setSettings] = useState<Settings>(() => {
-    try {
-      return { ...defaultSettings, ...JSON.parse(localStorage.getItem("kanatype-settings") ?? "{}") } as Settings;
-    } catch {
-      return defaultSettings;
-    }
-  });
+  const [settings, setSettings] = useState<Settings>(loadSettings);
   const [sentences, setSentences] = useState<Sentence[]>(fallbackSentences);
   const [sentenceIndex, setSentenceIndex] = useState(0);
   const [typed, setTyped] = useState("");
   const [mistakes, setMistakes] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const [remainingTime, setRemainingTime] = useState(settings.timerDuration);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
   const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
   const filteredSentences = useMemo(() => {
-    if (settings.sentenceLength === "mixed") return sentences;
-    return sentences.filter((item) => item.length === settings.sentenceLength);
-  }, [sentences, settings.sentenceLength]);
+    if (settings.difficultyType === "all") return sentences;
+    return sentences.filter((item) => item.difficulty.toLowerCase() === settings.difficultyType);
+  }, [sentences, settings.difficultyType]);
   const availableSentences = filteredSentences.length ? filteredSentences : sentences;
   const sentence = availableSentences[sentenceIndex % Math.max(availableSentences.length, 1)];
   const expected = sentence.romaji;
@@ -255,7 +264,7 @@ function App() {
   const progress = Math.min(100, (normalizedTyped.length / Math.max(normalizedExpected.length, 1)) * 100);
   const wpm = elapsed > 0 ? Math.round((correctCount * 5) / (elapsed / 60)) : 0;
   const accuracy = correctCount + mistakes > 0 ? Math.round((correctCount / (correctCount + mistakes)) * 100) : 100;
-  const secondsLeft = Math.max(0, settings.timerDuration - elapsed);
+  const secondsLeft = remainingTime;
 
   useEffect(() => {
     Promise.all(["n5", "n4", "n3", "n2", "n1"].map(async (level) => {
@@ -283,20 +292,26 @@ function App() {
 
   useEffect(() => {
     if (!settings.timerEnabled || isExpired) return;
-    const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000);
+    const timer = window.setInterval(() => {
+      setElapsed((value) => value + 1);
+      setRemainingTime((value) => Math.max(0, value - 1));
+    }, 1000);
     return () => window.clearInterval(timer);
   }, [settings.timerEnabled, isExpired]);
 
   useEffect(() => {
-    if (settings.timerEnabled && elapsed >= settings.timerDuration) setIsExpired(true);
-  }, [elapsed, settings.timerDuration, settings.timerEnabled]);
+    if (settings.timerEnabled && remainingTime <= 0) setIsExpired(true);
+  }, [remainingTime, settings.timerEnabled]);
 
   const nextSentence = useCallback(() => {
+    if (settings.timerEnabled) {
+      setRemainingTime((value) => value + settings.timerDuration);
+    }
     setSentenceIndex((value) => (value + 1) % Math.max(availableSentences.length, 1));
     setTyped("");
     setCorrectCount((value) => value + 1);
     setIsExpired(false);
-  }, [availableSentences.length]);
+  }, [availableSentences.length, settings.timerDuration, settings.timerEnabled]);
 
   const handleTypedValue = (value: string) => {
     setTyped(value);
@@ -358,6 +373,7 @@ function App() {
     setSettings((current) => ({ ...current, [key]: value }));
     if (key === "timerDuration") {
       setElapsed(0);
+      setRemainingTime(Number(value));
       setIsExpired(false);
     }
   };
@@ -397,10 +413,11 @@ function App() {
         <section className="practice-layout">
           {!isFocusMode && <aside className="intro-panel"><p className="eyebrow">READ. TYPE. REMEMBER.</p><h1>Find your rhythm<br /><em>in Japanese.</em></h1><p className="intro-copy">Read the sentence, then type its romaji. Build speed one calm phrase at a time.</p><div className="tip-card"><Icon name="sparkle" /><span><strong>Quick tip</strong><br />Press <kbd>Enter</kbd> when your answer is ready.</span></div></aside>}
           <section className="practice-card">
+            {isFocusMode && <div aria-label="Practice statistics" className="focus-stats"><div><span>WPM</span><strong>{wpm}</strong></div><div><span>ACCURACY</span><strong>{accuracy}%</strong></div><div><span>MISTAKES</span><strong>{mistakes}</strong></div><div><span>TIMER</span><strong>{settings.timerEnabled ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}` : "Off"}</strong></div></div>}
             <div className="card-header"><div><span className="label">CURRENT PHRASE</span><span className="grammar-tag">{sentence.difficulty} · {sentence.grammar}</span></div><div className="card-header-actions"><button aria-label="Hear this sentence aloud (1)" className="sound-key-button" onClick={playSentenceAudio} title="Hear this sentence aloud (1)" type="button"><Icon name="volume" size={14} /><span>1</span></button><span className="phrase-count">{sentenceIndex + 1} <i>/ {availableSentences.length}</i></span></div></div>
             <div className={`phrase-stage ${isShaking ? "shake" : ""}`}><JapaneseSentence sentence={sentence} typed={typed} /><p className={`translation ${settings.translationMode === "after" && !isCorrect ? "hidden-translation" : ""}`}>{sentence.english}</p></div>
             <div className="typing-section"><div className="typing-header"><span>TYPE THE ROMAJI</span><span>{normalizedTyped.length} / {normalizedExpected.length}</span></div><div className="answer-row"><RomajiSlots words={sentence.romajiWords} typed={typed} /><span className="enter-hint">Enter ↵</span></div><div className="answer-progress"><span style={{ width: `${progress}%` }} /></div></div>
-            {isExpired && <div className="expired-message"><strong>Time is up.</strong> The answer was <code>{expected}</code><button onClick={() => { setElapsed(0); setIsExpired(false); setTyped(""); }} type="button">Try again</button></div>}
+            {isExpired && <div className="expired-message"><strong>Time is up.</strong> The answer was <code>{expected}</code><button onClick={() => { setRemainingTime(settings.timerDuration); setIsExpired(false); setTyped(""); }} type="button">Try again</button></div>}
             <div className="card-footer"><div className="source-note">OpenJLPT · {sentence.grammar}</div><div className="progress-dots">{Array.from({ length: Math.min(5, availableSentences.length) }, (_, index) => <span className={index === sentenceIndex % 5 ? "active" : ""} key={index} />)}</div><button className="next-button" disabled={!isCorrect || isExpired} onClick={nextSentence} type="button">Next phrase <Icon name="arrow-left" /></button></div>
           </section>
         </section>
@@ -408,7 +425,7 @@ function App() {
         {!isFocusMode && <footer className="stats-bar"><div className="stat"><span>WPM</span><strong>{wpm}</strong></div><div className="stat"><span>ACCURACY</span><strong>{accuracy}<small>%</small></strong></div><div className="stat"><span>MISTAKES</span><strong>{mistakes}</strong></div><div className="timer-stat"><Icon name="clock" /><span>{settings.timerEnabled ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}` : "Timer off"}</span></div></footer>}
       </main>
 
-      {isSettingsOpen && <div className="modal-backdrop" onClick={() => setIsSettingsOpen(false)}><section aria-label="Settings" className="settings-panel" onClick={(event) => event.stopPropagation()}><div className="settings-heading"><div><span className="eyebrow">PERSONALIZE</span><h2>Practice settings</h2></div><button className="icon-button" aria-label="Close settings" onClick={() => setIsSettingsOpen(false)} type="button"><Icon name="close" /></button></div><div className="setting-row"><div><strong>Timer</strong><span>Challenge yourself against the clock</span></div><Toggle checked={settings.timerEnabled} label="Timer" onChange={() => updateSetting("timerEnabled", !settings.timerEnabled)} /></div>{settings.timerEnabled && <label className="setting-control"><span>Duration</span><select onChange={(event) => updateSetting("timerDuration", Number(event.target.value))} value={settings.timerDuration}><option value={30}>30 seconds</option><option value={60}>60 seconds</option><option value={120}>2 minutes</option></select></label>}<label className="setting-control"><span>Sentence length</span><select onChange={(event) => updateSetting("sentenceLength", event.target.value as Length)} value={settings.sentenceLength}><option value="mixed">Mixed</option><option value="short">Short</option><option value="medium">Medium</option><option value="long">Long</option></select></label><label className="setting-control"><span>English translation</span><select onChange={(event) => updateSetting("translationMode", event.target.value as Settings["translationMode"])} value={settings.translationMode}><option value="always">Always visible</option><option value="after">Reveal after correct answer</option></select></label><div className="theme-heading"><Icon name="palette" /><strong>Atmosphere</strong></div><div className="theme-grid">{themeInfo.map((theme) => <button className={`theme-option ${settings.theme === theme.id ? "selected" : ""}`} key={theme.id} onClick={() => updateSetting("theme", theme.id)} type="button"><span className={`theme-swatch swatch-${theme.id}`} /><span><strong>{theme.name}</strong><small>{theme.note}</small></span></button>)}</div></section></div>}
+      {isSettingsOpen && <div className="modal-backdrop" onClick={() => setIsSettingsOpen(false)}><section aria-label="Settings" className="settings-panel" onClick={(event) => event.stopPropagation()}><div className="settings-heading"><div><span className="eyebrow">PERSONALIZE</span><h2>Practice settings</h2></div><button className="icon-button" aria-label="Close settings" onClick={() => setIsSettingsOpen(false)} type="button"><Icon name="close" /></button></div><div className="setting-row"><div><strong>Timer</strong><span>Challenge yourself against the clock</span></div><Toggle checked={settings.timerEnabled} label="Timer" onChange={() => updateSetting("timerEnabled", !settings.timerEnabled)} /></div>{settings.timerEnabled && <label className="setting-control"><span>Base seconds</span><select onChange={(event) => updateSetting("timerDuration", Number(event.target.value))} value={settings.timerDuration}><option value={20}>20 seconds</option><option value={15}>15 seconds</option><option value={10}>10 seconds</option><option value={5}>5 seconds</option><option value={3}>3 seconds</option></select></label>}<label className="setting-control"><span>Difficulty type</span><select onChange={(event) => updateSetting("difficultyType", event.target.value as Difficulty)} value={settings.difficultyType}><option value="n5">n5</option><option value="n4">n4</option><option value="n3">n3</option><option value="n2">n2</option><option value="n1">n1</option><option value="all">all</option></select></label><label className="setting-control"><span>English translation</span><select onChange={(event) => updateSetting("translationMode", event.target.value as Settings["translationMode"])} value={settings.translationMode}><option value="always">Always visible</option><option value="after">Reveal after correct answer</option></select></label><div className="theme-heading"><Icon name="palette" /><strong>Atmosphere</strong></div><div className="theme-grid">{themeInfo.map((theme) => <button className={`theme-option ${settings.theme === theme.id ? "selected" : ""}`} key={theme.id} onClick={() => updateSetting("theme", theme.id)} type="button"><span className={`theme-swatch swatch-${theme.id}`} /><span><strong>{theme.name}</strong><small>{theme.note}</small></span></button>)}</div></section></div>}
     </div>
   );
 }
