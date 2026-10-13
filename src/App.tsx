@@ -316,10 +316,12 @@ function App() {
   }, [availableSentences.length, settings.timerDuration, settings.timerEnabled]);
 
   const restartSentence = useCallback(() => {
+    setSentences(shuffleSentences(sentences));
+    setSentenceIndex(0);
     setTyped("");
     setRemainingTime(settings.timerDuration);
     setIsExpired(false);
-  }, [settings.timerDuration]);
+  }, [sentences, settings.timerDuration]);
 
   const handleTypedValue = (value: string) => {
     setTyped(value);
