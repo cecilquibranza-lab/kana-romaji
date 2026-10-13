@@ -68,7 +68,7 @@ const defaultSettings: Settings = {
   translationMode: "always",
   theme: "sakura",
 };
-const timerDurations = [40, 35, 30, 25, 20, 15, 10, 5, 3];
+const timerDurations = [50, 40, 35, 30, 25, 20, 15, 10, 5, 3];
 const difficultyTypes: Difficulty[] = ["n5", "n4", "n3", "n2", "n1", "all"];
 
 function loadSettings(): Settings {
@@ -87,7 +87,7 @@ const soundEffects = {
   type: "/sfx/universfield-bubble-pop-02-293341.mp3",
   erase: "/sfx/universfield-bubble-pop-03-320977.mp3",
   correct: "/sfx/floraphonic-jug-pop-1-186886.mp3",
-  incorrect: "/sfx/floraphonic-jug-pop-2-186887.mp3",
+  incorrect: "/sfx/universfield-wrong-answer-126515.mp3",
 } as const;
 
 function playSoundEffect(effect: keyof typeof soundEffects): void {
@@ -326,9 +326,12 @@ function App() {
   const handleTypedValue = (value: string) => {
     setTyped(value);
     if (normalizeAnswer(value).length > 0 && !normalizedExpected.startsWith(normalizeAnswer(value))) {
+      playSoundEffect("incorrect");
       setMistakes((count) => count + 1);
       setIsShaking(true);
       window.setTimeout(() => setIsShaking(false), 260);
+    } else {
+      playSoundEffect("type");
     }
   };
 
@@ -375,7 +378,6 @@ function App() {
     }
     if (/^[a-zA-Z]$/.test(event.key)) {
       event.preventDefault();
-      playSoundEffect("type");
       handleTypedValue(`${typed}${event.key.toLowerCase()}`);
     }
   };
@@ -441,7 +443,7 @@ function App() {
         {!isFocusMode && <footer className="stats-bar"><div className="stat"><span>WPM</span><strong>{wpm}</strong></div><div className="stat"><span>ACCURACY</span><strong>{accuracy}<small>%</small></strong></div><div className="stat"><span>MISTAKES</span><strong>{mistakes}</strong></div><div className="timer-stat"><Icon name="clock" /><span>{settings.timerEnabled ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}` : "Timer off"}</span></div></footer>}
       </main>
 
-      {isSettingsOpen && <div className="modal-backdrop" onClick={() => setIsSettingsOpen(false)}><section aria-label="Settings" className="settings-panel" onClick={(event) => event.stopPropagation()}><div className="settings-heading"><div><span className="eyebrow">PERSONALIZE</span><h2>Practice settings</h2></div><button className="icon-button" aria-label="Close settings" onClick={() => setIsSettingsOpen(false)} type="button"><Icon name="close" /></button></div><div className="setting-row"><div><strong>Timer</strong><span>Challenge yourself against the clock</span></div><Toggle checked={settings.timerEnabled} label="Timer" onChange={() => updateSetting("timerEnabled", !settings.timerEnabled)} /></div>{settings.timerEnabled && <label className="setting-control"><span>Base seconds</span><select onChange={(event) => updateSetting("timerDuration", Number(event.target.value))} value={settings.timerDuration}><option value={40}>40 seconds</option><option value={35}>35 seconds</option><option value={30}>30 seconds</option><option value={25}>25 seconds</option><option value={20}>20 seconds</option><option value={15}>15 seconds</option><option value={10}>10 seconds</option><option value={5}>5 seconds</option><option value={3}>3 seconds</option></select></label>}<label className="setting-control"><span>Difficulty type</span><select onChange={(event) => updateSetting("difficultyType", event.target.value as Difficulty)} value={settings.difficultyType}><option value="n5">n5</option><option value="n4">n4</option><option value="n3">n3</option><option value="n2">n2</option><option value="n1">n1</option><option value="all">all</option></select></label><label className="setting-control"><span>English translation</span><select onChange={(event) => updateSetting("translationMode", event.target.value as Settings["translationMode"])} value={settings.translationMode}><option value="always">Always visible</option><option value="after">Reveal after correct answer</option></select></label><div className="theme-heading"><Icon name="palette" /><strong>Atmosphere</strong></div><div className="theme-grid">{themeInfo.map((theme) => <button className={`theme-option ${settings.theme === theme.id ? "selected" : ""}`} key={theme.id} onClick={() => updateSetting("theme", theme.id)} type="button"><span className={`theme-swatch swatch-${theme.id}`} /><span><strong>{theme.name}</strong><small>{theme.note}</small></span></button>)}</div></section></div>}
+      {isSettingsOpen && <div className="modal-backdrop" onClick={() => setIsSettingsOpen(false)}><section aria-label="Settings" className="settings-panel" onClick={(event) => event.stopPropagation()}><div className="settings-heading"><div><span className="eyebrow">PERSONALIZE</span><h2>Practice settings</h2></div><button className="icon-button" aria-label="Close settings" onClick={() => setIsSettingsOpen(false)} type="button"><Icon name="close" /></button></div><div className="setting-row"><div><strong>Timer</strong><span>Challenge yourself against the clock</span></div><Toggle checked={settings.timerEnabled} label="Timer" onChange={() => updateSetting("timerEnabled", !settings.timerEnabled)} /></div>{settings.timerEnabled && <label className="setting-control"><span>Base seconds</span><select onChange={(event) => updateSetting("timerDuration", Number(event.target.value))} value={settings.timerDuration}><option value={50}>50 seconds</option><option value={40}>40 seconds</option><option value={35}>35 seconds</option><option value={30}>30 seconds</option><option value={25}>25 seconds</option><option value={20}>20 seconds</option><option value={15}>15 seconds</option><option value={10}>10 seconds</option><option value={5}>5 seconds</option><option value={3}>3 seconds</option></select></label>}<label className="setting-control"><span>Difficulty type</span><select onChange={(event) => updateSetting("difficultyType", event.target.value as Difficulty)} value={settings.difficultyType}><option value="n5">n5</option><option value="n4">n4</option><option value="n3">n3</option><option value="n2">n2</option><option value="n1">n1</option><option value="all">all</option></select></label><label className="setting-control"><span>English translation</span><select onChange={(event) => updateSetting("translationMode", event.target.value as Settings["translationMode"])} value={settings.translationMode}><option value="always">Always visible</option><option value="after">Reveal after correct answer</option></select></label><div className="theme-heading"><Icon name="palette" /><strong>Atmosphere</strong></div><div className="theme-grid">{themeInfo.map((theme) => <button className={`theme-option ${settings.theme === theme.id ? "selected" : ""}`} key={theme.id} onClick={() => updateSetting("theme", theme.id)} type="button"><span className={`theme-swatch swatch-${theme.id}`} /><span><strong>{theme.name}</strong><small>{theme.note}</small></span></button>)}</div></section></div>}
     </div>
   );
 }
