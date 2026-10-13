@@ -338,12 +338,12 @@ function App() {
     ) {
       return;
     }
-    if (event.key === "1") {
+    if (event.ctrlKey && event.key === "1") {
       event.preventDefault();
       playSentenceAudio();
       return;
     }
-    if (event.key === "2") {
+    if (event.ctrlKey && event.key === "2") {
       event.preventDefault();
       restartSentence();
       return;
